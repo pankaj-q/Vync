@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @map("_id") @default(auto()) @db.ObjectId
+  name      String   @map("name")
+  email     String   @map("email") @unique
+  password  String?  @map("password")
+  provider  String   @default("local") @map("provider")
+  googleId  String?  @map("googleId")
+  githubId  String?  @map("githubId")
+  phone     String?  @map("phone")
+  avatar    String?  @map("avatar")
+  bio       String?  @map("bio")
+  isOnline  Boolean  @default(false) @map("isOnline")
+  lastSeen  DateTime @default(now()) @map("lastSeen")
+  createdAt DateTime @default(now()) @map("createdAt")
+  updatedAt DateTime @updatedAt @map("updatedAt")
+
+  messages                 Message[]              @relation("sender")
+  conversations            ConversationParticipant[]
+  sentFriendRequests       FriendRequest[]        @relation("sentRequests")
+  receivedFriendRequests   FriendRequest[]        @relation("receivedRequests")
+}
+
+model Conversation {
+  id        String   @id @map("_id") @default(auto()) @db.ObjectId
+  isGroup   Boolean  @default(false) @map("isGroup")
+  name      String?  @map("name")
+  avatar    String?  @map("avatar")
+  createdAt DateTime @default(now()) @map("createdAt")
+  updatedAt DateTime @updatedAt @map("updatedAt")
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String   @id @map("_id") @default(auto()) @db.ObjectId
+  userId         String   @map("userId") @db.ObjectId
+  conversationId String   @map("conversationId") @db.ObjectId
+  joinedAt       DateTime @default(now()) @map("joinedAt")
+
+  user         User         @relation(fields: [userId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+}
+
+model Message {
+  id              String   @id @map("_id") @default(auto()) @db.ObjectId
+  content         String?  @map("content")
+  senderId        String   @map("senderId") @db.ObjectId
+  conversationId  String   @map("conversationId") @db.ObjectId
+  replyToId       String?  @map("replyToId") @db.ObjectId
+  forwardedFromId String?  @map("forwardedFromId") @db.ObjectId
+  messageType     String   @default("text") @map("messageType")
+  mediaUrl        String?  @map("mediaUrl")
+  mediaType       String?  @map("mediaType")
+  status          String   @default("sent") @map("status")
+  isEdited        Boolean  @default(false) @map("isEdited")
+  createdAt       DateTime @default(now()) @map("createdAt")
+  updatedAt       DateTime @updatedAt @map("updatedAt")
+
+  sender        User     @relation("sender", fields: [senderId], references: [id])
+  conversation  Conversation @relation(fields: [conversationId], references: [id])
+  replyTo       Message?  @relation("MessageReply", fields: [replyToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies       Message[] @relation("MessageReply")
+  forwardedFrom Message?  @relation("MessageForward", fields: [forwardedFromId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  forwards      Message[] @relation("MessageForward")
+}
+
+model FriendRequest {
+  id         String   @id @map("_id") @default(auto()) @db.ObjectId
+  senderId   String   @map("senderId") @db.ObjectId
+  receiverId String   @map("receiverId") @db.ObjectId
+  status     String   @default("pending") @map("status")
+  createdAt  DateTime @default(now()) @map("createdAt")
+  updatedAt  DateTime @updatedAt @map("updatedAt")
+
+  sender   User @relation("sentRequests", fields: [senderId], references: [id])
+  receiver User @relation("receivedRequests", fields: [receiverId], references: [id])
+}
