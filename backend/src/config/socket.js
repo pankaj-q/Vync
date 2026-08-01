@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import http from 'http';
 import jwt from 'jsonwebtoken';
 import redis from './redis.js';
+import Conversation from '../model/conversation.model.js';
 
 let io;
 
@@ -24,7 +25,7 @@ const setupSocket = (app) => {
             if (!token) {
                 return next(new Error('Authentication required'));
             }
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
             socket.userId = decoded._id;
             next();
         } catch (err) {
@@ -41,7 +42,14 @@ const setupSocket = (app) => {
 
         io.emit('user-status', { userId: socket.userId, status: 'online' });
 
-        socket.on('join-conversation', (conversationId) => {
+        socket.on('join-conversation', async (conversationId) => {
+            const conversation = await Conversation.findById(conversationId);
+            const isParticipant = conversation && conversation.participants.some(
+                (p) => p.toString() === socket.userId.toString()
+            );
+            if (!isParticipant) {
+                return socket.emit('error', { message: 'Not authorized to join this conversation' });
+            }
             socket.join(`conversation:${conversationId}`);
         });
 

@@ -3,6 +3,12 @@ import Conversation from '../model/conversation.model.js';
 import catchAsync from '../utils/catchAsync.js';
 import AppError from '../utils/AppError.js';
 
+const assertParticipant = (conversation, userId) => {
+    if (!conversation.participants.some((p) => p.toString() === userId.toString())) {
+        throw new AppError("Not authorized to access this conversation", 403);
+    }
+};
+
 const sendMessage = catchAsync(async (req, res) => {
     const { conversationId, content, messageType, mediaUrl, replyTo } = req.body;
 
@@ -14,6 +20,8 @@ const sendMessage = catchAsync(async (req, res) => {
     if (!conversation) {
         throw new AppError("Conversation not found", 404);
     }
+
+    assertParticipant(conversation, req.user._id);
 
     const message = await Message.create({
         conversation: conversationId,
@@ -49,6 +57,10 @@ const getMessages = catchAsync(async (req, res) => {
     const limit = 50;
     const skip = (page - 1) * limit;
 
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) throw new AppError("Conversation not found", 404);
+    assertParticipant(conversation, req.user._id);
+
     const messages = await Message.find({ conversation: conversationId })
         .populate('sender', 'name email avatar')
         .populate('replyTo')
@@ -72,6 +84,9 @@ const editMessage = catchAsync(async (req, res) => {
         throw new AppError("Can only edit your own messages", 403);
     }
 
+    const conversation = await Conversation.findById(message.conversation);
+    assertParticipant(conversation, req.user._id);
+
     message.content = content;
     message.isEdited = true;
     await message.save();
@@ -80,7 +95,6 @@ const editMessage = catchAsync(async (req, res) => {
         .populate('sender', 'name email avatar')
         .populate('replyTo');
 
-    const conversation = await Conversation.findById(message.conversation);
     const io = req.app.get('io');
     if (io) {
         for (const participant of conversation.participants) {
@@ -102,12 +116,14 @@ const deleteMessage = catchAsync(async (req, res) => {
         throw new AppError("Can only delete your own messages", 403);
     }
 
+    const conversation = await Conversation.findById(message.conversation);
+    assertParticipant(conversation, req.user._id);
+
     message.content = "This message was deleted";
     message.isDeleted = true;
     message.isEdited = false;
     await message.save();
 
-    const conversation = await Conversation.findById(message.conversation);
     const io = req.app.get('io');
     if (io) {
         for (const participant of conversation.participants) {
@@ -131,6 +147,10 @@ const forwardMessage = catchAsync(async (req, res) => {
 
     const conversation = await Conversation.findById(targetConversationId);
     if (!conversation) throw new AppError("Target conversation not found", 404);
+    assertParticipant(conversation, req.user._id);
+
+    const sourceConversation = await Conversation.findById(original.conversation);
+    assertParticipant(sourceConversation, req.user._id);
 
     const forwarded = await Message.create({
         conversation: targetConversationId,
@@ -169,6 +189,9 @@ const reactToMessage = catchAsync(async (req, res) => {
     const message = await Message.findById(id);
     if (!message) throw new AppError("Message not found", 404);
 
+    const conversation = await Conversation.findById(message.conversation);
+    assertParticipant(conversation, req.user._id);
+
     const existing = message.reactions.find(
         (r) => r.user.toString() === req.user._id.toString() && r.emoji === emoji
     );
@@ -190,7 +213,6 @@ const reactToMessage = catchAsync(async (req, res) => {
 
     const populated = await Message.findById(id).populate('reactions.user', 'name');
 
-    const conversation = await Conversation.findById(message.conversation);
     const io = req.app.get('io');
     if (io) {
         for (const participant of conversation.participants) {
@@ -212,6 +234,10 @@ const searchMessages = catchAsync(async (req, res) => {
     const { q } = req.query;
     if (!q || !q.trim()) return res.json({ messages: [] });
 
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) throw new AppError("Conversation not found", 404);
+    assertParticipant(conversation, req.user._id);
+
     const messages = await Message.find({
         conversation: conversationId,
         content: { $regex: q.trim(), $options: 'i' },
@@ -228,6 +254,10 @@ const searchMessages = catchAsync(async (req, res) => {
 const markAsRead = catchAsync(async (req, res) => {
     const { conversationId } = req.body;
     if (!conversationId) throw new AppError("Conversation ID required", 400);
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) throw new AppError("Conversation not found", 404);
+    assertParticipant(conversation, req.user._id);
 
     const result = await Message.updateMany(
         { conversation: conversationId, sender: { $ne: req.user._id }, status: { $ne: 'read' } },

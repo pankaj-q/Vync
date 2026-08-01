@@ -48,7 +48,8 @@ if (s3Configured()) {
             cb(null, uploadsDir);
         },
         filename: function (req, file, cb) {
-            cb(null, Date.now() + "_" + file.originalname)
+            const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+            cb(null, Date.now() + "_" + safeName);
         }
     });
 }
