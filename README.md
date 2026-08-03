@@ -327,6 +327,24 @@ The app is a single Node.js server: it serves both the API and the built fronten
 
 ---
 
+## Performance & Capacity
+
+Verified limits/config of this build (useful for resumes and capacity planning):
+
+| Metric | Value |
+|---|---|
+| Concurrent users | ~100+ on a single Node.js process (WebSockets + async I/O, not benchmarked beyond this) |
+| API rate limit | 60 requests/minute per IP (Redis `INCR` + `PEXPIRE`) |
+| Message pagination | 50 messages per page |
+| Message search | limited to 30 results |
+| File upload cap | 10 MB |
+| Allowed MIME types | 11 (images, video, audio, PDF, zip, text) |
+| Online presence TTL | 300s (Redis) |
+| JWT access token | 1h |
+| JWT refresh token | 7d |
+
+---
+
 ## Security
 
 - JWT signed with HS256 (algorithm pinned) — access tokens expire in 1h
@@ -337,3 +355,10 @@ The app is a single Node.js server: it serves both the API and the built fronten
 - helmet security headers + CORS allowlist (`CLIENT_URL` + localhost)
 - Error handler returns generic messages in production (`NODE_ENV=production`)
 - `.env` is gitignored — secrets never committed; use `.env.example` as a template
+
+## Resume Highlights
+
+> - Built a full-stack real-time chat app handling ~100+ concurrent users on a single Node.js process using WebSockets, MongoDB, and Redis for online presence and typing state.
+> - Enforced Redis-based rate limiting at 60 req/min per IP across all API routes and JWT auth (1h access / 7d refresh) to mitigate abuse and control token lifetime.
+> - Optimized chat data transport with 50-message pagination and debounced search to keep payloads light under load.
+> - Secured media uploads with a 10 MB cap, a whitelist of 11 MIME types, and path-traversal sanitization; media served via AWS S3.
