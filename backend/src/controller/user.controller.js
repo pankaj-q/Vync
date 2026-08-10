@@ -2,7 +2,7 @@ import User from '../model/user.model.js';
 import crypto from 'crypto';
 import catchAsync from '../utils/catchAsync.js';
 import AppError from '../utils/AppError.js';
-import { sendVerificationEmail, isEmailConfigured } from '../utils/email.js';
+import { sendVerificationEmail, sendResetPasswordEmail, isEmailConfigured } from '../utils/email.js';
 
 const registerUser = catchAsync(async (req, res) => {
     const { name, email, password } = req.body;
@@ -39,6 +39,68 @@ const registerUser = catchAsync(async (req, res) => {
             email: user.email,
         }
     });
+});
+
+// Forgot password — always returns 200 with generic message to prevent email enumeration
+const forgotPassword = catchAsync(async (req, res) => {
+    const { email } = req.body;
+    if (!email) throw new AppError("Email is required", 400);
+
+    const user = await User.findOne({ email });
+
+    // Always return success to prevent email enumeration
+    if (!user) {
+        return res.json({
+            success: true,
+            message: "If an account exists with this email, a reset link has been sent to your email. Please check your inbox."
+        });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await user.save();
+
+    await sendResetPasswordEmail(email, user.name, token);
+
+    res.json({
+        success: true,
+        message: "If an account exists with this email, a reset link has been sent to your email. Please check your inbox."
+    });
+});
+
+// Reset password — use token from email to set new password
+const resetPassword = catchAsync(async (req, res) => {
+    const { token, password, confirmPassword } = req.body;
+
+    if (!token || !password || !confirmPassword) {
+        throw new AppError("Token, password, and confirm password are required", 400);
+    }
+
+    if (password !== confirmPassword) {
+        throw new AppError("Passwords do not match", 400);
+    }
+
+    // Validate password strength (matching the schema regex)
+    if (!/^(?=.*[A-Za-z])(?=.*\d).{6,}$/.test(password)) {
+        throw new AppError("Password must be at least 6 characters and contain at least one letter and one number", 400);
+    }
+
+    const user = await User.findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: new Date() }
+    });
+
+    if (!user) {
+        throw new AppError("Invalid or expired reset token", 400);
+    }
+
+    user.password = password; // Will be hashed by pre-save hook
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+
+    res.json({ success: true, message: "Password has been reset successfully. You can now log in." });
 });
 
 const verifyEmail = catchAsync(async (req, res) => {
@@ -154,6 +216,8 @@ export {
     loginUser,
     verifyEmail,
     resendVerification,
+    forgotPassword,
+    resetPassword,
     searchUsers,
     getMe,
     updateProfile

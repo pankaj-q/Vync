@@ -51,10 +51,18 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
-  verificationExpires: {
-    type: Date,
-    default: null,
-  },
+verificationExpires: {
+      type: Date,
+      default: null,
+    },
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+    },
 });
 
         userSchema.pre('save',async function() {
