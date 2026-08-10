@@ -79,6 +79,7 @@ function Login() {
         <input type="email" name="email" placeholder="Enter Email" value={user.email} onChange={handleChange} required />
         <input type="password" name="password" placeholder="Enter Password" value={user.password} onChange={handleChange} required />
         <button type="submit">Login</button>
+        <p className="forgot-link"><Link to="/forgot-password">Forgot password?</Link></p>
         <p>Don't have an account? <Link to="/">Register</Link></p>
       </form>
       {needsVerification && (

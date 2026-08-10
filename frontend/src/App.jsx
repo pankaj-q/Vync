@@ -5,6 +5,8 @@ import Login from "./pages/login";
 import Dashboard from "./pages/Dashboard";
 import VerifyEmail from "./pages/VerifyEmail";
 import OAuthCallback from "./pages/OAuthCallback";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/oauth-callback" element={<OAuthCallback />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
