@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import catchAsync from '../utils/catchAsync.js';
 import AppError from '../utils/AppError.js';
 import { sendVerificationEmail, sendResetPasswordEmail, isEmailConfigured } from '../utils/email.js';
+import { s3Configured } from '../middleware/multer.middleware.js';
 
 const registerUser = catchAsync(async (req, res) => {
     const { name, email, password } = req.body;
@@ -204,7 +205,9 @@ const updateProfile = catchAsync(async (req, res) => {
     if (name !== undefined) updateData.name = name;
     if (bio !== undefined) updateData.bio = bio;
     if (req.file) {
-        updateData.avatarUrl = `/uploads/${req.file.filename}`;
+        updateData.avatarUrl = s3Configured()
+            ? req.file.location
+            : `/uploads/${req.file.filename}`;
     }
     const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true }).select('-password');
     if (!user) throw new AppError("User not found", 404);
