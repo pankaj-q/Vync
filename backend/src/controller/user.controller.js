@@ -23,7 +23,7 @@ const registerUser = catchAsync(async (req, res) => {
         user.verificationToken = token;
         user.verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
         await user.save();
-        await sendVerificationEmail(email, name, token);
+        sendVerificationEmail(email, name, token).catch((err) => console.error('Email send failed:', err));
     } else {
         user.isVerified = true;
         await user.save();
@@ -62,7 +62,7 @@ const forgotPassword = catchAsync(async (req, res) => {
     user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await user.save();
 
-    await sendResetPasswordEmail(email, user.name, token);
+    sendResetPasswordEmail(email, user.name, token).catch((err) => console.error('Email send failed:', err));
 
     res.json({
         success: true,
@@ -135,7 +135,7 @@ const resendVerification = catchAsync(async (req, res) => {
     user.verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await user.save();
 
-    await sendVerificationEmail(email, user.name, token);
+    sendVerificationEmail(email, user.name, token).catch((err) => console.error('Email send failed:', err));
 
     res.json({ success: true, message: "Verification email resent. Please check your inbox." });
 });
