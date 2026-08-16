@@ -38,7 +38,7 @@ const setupSocket = (app) => {
 
         socket.join(`user:${socket.userId}`);
 
-        redis.set(`online:${socket.userId}`, '1', 'EX', 300);
+        redis.set(`online:${socket.userId}`, '1', 'EX', 300).catch((err) => console.error('Redis online set error:', err));
 
         io.emit('user-status', { userId: socket.userId, status: 'online' });
 
@@ -68,7 +68,7 @@ const setupSocket = (app) => {
         socket.on('disconnect', () => {
             console.log(`User disconnected: ${socket.userId}`);
 
-            redis.del(`online:${socket.userId}`);
+            redis.del(`online:${socket.userId}`).catch((err) => console.error('Redis online del error:', err));
 
             io.emit('user-status', { userId: socket.userId, status: 'offline' });
         });
