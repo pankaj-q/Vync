@@ -11,7 +11,6 @@ if (isGoogleConfigured()) {
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         callbackURL: `${process.env.BACKEND_URL || "http://localhost:5005"}/api/auth/google/callback`,
-        prompt: 'select_account',
       },
       async (accessToken, refreshToken, profile, done) => {
         try {

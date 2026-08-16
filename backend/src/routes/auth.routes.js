@@ -10,7 +10,7 @@ router.get("/google", (req, res, next) => {
   if (!isGoogleConfigured()) {
     return res.redirect(`${process.env.CLIENT_URL || "http://localhost:5173"}/login?google=not_configured`);
   }
-  passport.authenticate("google", { scope: ["profile", "email"] })(req, res, next);
+  passport.authenticate("google", { scope: ["profile", "email"], prompt: "select_account" })(req, res, next);
 });
 
 router.get(
