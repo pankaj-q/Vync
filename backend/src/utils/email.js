@@ -85,4 +85,18 @@ const sendResetPasswordEmail = async (email, name, token) => {
     });
 };
 
-export { sendVerificationEmail, sendResetPasswordEmail, isEmailConfigured };
+const verifySmtp = async () => {
+    if (!isEmailConfigured()) return { ok: false, error: 'SMTP not configured (SMTP_HOST/SMTP_USER/SMTP_PASS missing)' };
+    const transporter = createTransporter();
+    if (!transporter) return { ok: false, error: 'Transporter not created' };
+    try {
+        await transporter.verify();
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err.message, code: err.code, response: err.response };
+    } finally {
+        transporter.close();
+    }
+};
+
+export { sendVerificationEmail, sendResetPasswordEmail, isEmailConfigured, verifySmtp };

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import passport from './config/passport.js';
 import rateLimit from './middleware/rateLimit.js'
 import errorHandler from './middleware/errorHandler.js'
+import { verifySmtp } from './utils/email.js'
 import userRoutes from './routes/userRoutes.js'
 import authRoutes from './routes/auth.routes.js'
 import fileRoutes from './routes/file.js'
@@ -43,6 +44,10 @@ app.use(passport.initialize());
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/health/email', async (req, res) => {
+    res.json(await verifySmtp());
 });
 
 app.use('/api', rateLimit(60000, 60));
