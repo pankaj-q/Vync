@@ -9,6 +9,10 @@
       "destination": "https://vync-d54m.onrender.com/uploads/:path*"
     },
     {
+      "source": "/socket.io",
+      "destination": "https://vync-d54m.onrender.com/socket.io"
+    },
+    {
       "source": "/socket.io/:path*",
       "destination": "https://vync-d54m.onrender.com/socket.io/:path*"
     },

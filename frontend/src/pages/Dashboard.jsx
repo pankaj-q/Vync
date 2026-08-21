@@ -11,7 +11,7 @@ let seenMessageIds = new Set();
 
 function getSocket() {
   if (!socket) {
-    const url = import.meta.env.DEV ? 'http://localhost:5005' : undefined;
+    const url = import.meta.env.DEV ? 'http://localhost:5005' : (import.meta.env.VITE_SOCKET_URL || undefined);
     socket = io(url, { autoConnect: false });
   }
   return socket;
