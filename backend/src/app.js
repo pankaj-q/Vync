@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import passport from './config/passport.js';
 import rateLimit from './middleware/rateLimit.js'
 import errorHandler from './middleware/errorHandler.js'
-import { verifySmtp } from './utils/email.js'
+import { verifySmtp, sendTestEmail } from './utils/email.js'
 import userRoutes from './routes/userRoutes.js'
 import authRoutes from './routes/auth.routes.js'
 import fileRoutes from './routes/file.js'
@@ -48,6 +48,13 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/health/email', async (req, res) => {
     res.json(await verifySmtp());
+});
+
+app.post('/api/health/email', async (req, res) => {
+    const { to } = req.body || {};
+    if (!to) return res.status(400).json({ error: 'Provide { "to": "email" }' });
+    if (to !== process.env.SMTP_USER) return res.status(403).json({ error: 'Only self-sends to SMTP_USER are allowed' });
+    res.json(await sendTestEmail(to));
 });
 
 app.use('/api', rateLimit(60000, 60));

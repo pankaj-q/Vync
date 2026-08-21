@@ -131,4 +131,22 @@ const verifySmtp = async () => {
     return result;
 };
 
-export { sendVerificationEmail, sendResetPasswordEmail, isEmailConfigured, verifySmtp };
+const sendTestEmail = async (to) => {
+    const transporter = createTransporter();
+    if (!transporter) return { ok: false, error: 'Transporter not created' };
+    try {
+        const info = await transporter.sendMail({
+            from: `"Vync" <${process.env.SMTP_USER}>`,
+            to,
+            subject: 'Vync SMTP delivery test',
+            text: `If you received this, SMTP sending from the server works. (${new Date().toISOString()})`,
+        });
+        return { ok: true, messageId: info.messageId, accepted: info.accepted, response: info.response };
+    } catch (err) {
+        return { ok: false, error: err.message, code: err.code, response: err.response };
+    } finally {
+        transporter.close();
+    }
+};
+
+export { sendVerificationEmail, sendResetPasswordEmail, isEmailConfigured, verifySmtp, sendTestEmail };
