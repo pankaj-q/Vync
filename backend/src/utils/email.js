@@ -1,4 +1,8 @@
 import nodemailer from 'nodemailer';
+import dns from 'node:dns';
+import net from 'node:net';
+
+dns.setDefaultResultOrder('ipv4first');
 
 const isEmailConfigured = () => {
     return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
@@ -85,18 +89,46 @@ const sendResetPasswordEmail = async (email, name, token) => {
     });
 };
 
+const tcpConnectTest = (host, port, family) => new Promise((resolve) => {
+    const socket = net.connect({ host, port, family });
+    const finish = (r) => { socket.destroy(); resolve(r); };
+    socket.setTimeout(10000, () => finish('timeout'));
+    socket.on('connect', () => finish('connected'));
+    socket.on('error', (e) => finish(e.code || e.message));
+});
+
 const verifySmtp = async () => {
-    if (!isEmailConfigured()) return { ok: false, error: 'SMTP not configured (SMTP_HOST/SMTP_USER/SMTP_PASS missing)' };
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const port = parseInt(process.env.SMTP_PORT || '587');
+    const result = { configured: isEmailConfigured(), host, port };
+
+    try { result.dnsA_ipv4 = await dns.promises.resolve4(host); } catch (e) { result.dnsA_ipv4 = e.code; }
+    try { result.dnsAAAA_ipv6 = await dns.promises.resolve6(host); } catch (e) { result.dnsAAAA_ipv6 = e.code; }
+
+    if (Array.isArray(result.dnsA_ipv4)) {
+        result.tcp4_port587 = await tcpConnectTest(result.dnsA_ipv4[0], 587, 4);
+        result.tcp4_configuredPort = await tcpConnectTest(result.dnsA_ipv4[0], port, 4);
+    }
+    if (Array.isArray(result.dnsAAAA_ipv6)) {
+        result.tcp6 = await tcpConnectTest(result.dnsAAAA_ipv6[0], 587, 6);
+    }
+
+    if (!isEmailConfigured()) {
+        result.smtpVerify = 'SMTP not configured (SMTP_HOST/SMTP_USER/SMTP_PASS missing)';
+        return result;
+    }
+
     const transporter = createTransporter();
-    if (!transporter) return { ok: false, error: 'Transporter not created' };
+    if (!transporter) { result.smtpVerify = 'Transporter not created'; return result; }
     try {
         await transporter.verify();
-        return { ok: true };
+        result.smtpVerify = 'OK';
     } catch (err) {
-        return { ok: false, error: err.message, code: err.code, response: err.response };
+        result.smtpVerify = { error: err.message, code: err.code, response: err.response };
     } finally {
         transporter.close();
     }
+    return result;
 };
 
 export { sendVerificationEmail, sendResetPasswordEmail, isEmailConfigured, verifySmtp };
