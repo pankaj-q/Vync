@@ -4,55 +4,103 @@ import net from 'node:net';
 
 dns.setDefaultResultOrder('ipv4first');
 
-const isEmailConfigured = () => {
-    return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+const emailProvider = () => {
+    if (process.env.BREVO_API_KEY) return 'brevo';
+    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return 'smtp';
+    return null;
 };
 
-const createTransporter = () => {
-    if (!isEmailConfigured()) return null;
-    return nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
+const isEmailConfigured = () => Boolean(emailProvider());
+
+const senderEmail = () => process.env.BREVO_SENDER || process.env.SMTP_USER || '';
+
+const sendViaBrevo = async ({ to, subject, html }) => {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json',
+            'accept': 'application/json',
         },
-        connectionTimeout: 15000,
-        greetingTimeout: 10000,
-        socketTimeout: 20000,
+        body: JSON.stringify({
+            sender: { name: 'Vync', email: senderEmail() },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html,
+        }),
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Brevo API ${res.status}: ${body.slice(0, 300)}`);
+    }
+    return res.json();
+};
+
+const createTransporter = () => nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
+});
+
+const sendEmail = async ({ to, subject, html }) => {
+    const provider = emailProvider();
+    if (provider === 'brevo') return sendViaBrevo({ to, subject, html });
+
+    const transporter = createTransporter();
+    return transporter.sendMail({
+        from: `"Vync" <${process.env.SMTP_USER}>`,
+        to,
+        subject,
+        html,
     });
 };
+
+const verificationTemplate = (name, link) => `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color: #22c55e;">Welcome to Vync!</h2>
+        <p>Hi ${name},</p>
+        <p>Click the button below to verify your email address:</p>
+        <a href="${link}" style="display: inline-block; padding: 12px 24px; background: #22c55e; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Verify Email</a>
+        <p style="color: #6b7280; font-size: 13px;">Or copy this link: ${link}</p>
+        <p style="color: #6b7280; font-size: 12px;">This link expires in 24 hours.</p>
+    </div>
+`;
+
+const resetTemplate = (name, link) => `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color: #22c55e;">Password Reset Request</h2>
+        <p>Hi ${name},</p>
+        <p>You requested to reset your password. Click the button below to set a new password:</p>
+        <a href="${link}" style="display: inline-block; padding: 12px 24px; background: #22c55e; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Reset Password</a>
+        <p style="color: #6b7280; font-size: 13px;">Or copy this link: ${link}</p>
+        <p style="color: #6b7280; font-size: 12px;">This link expires in 1 hour.</p>
+        <p style="color: #6b7280; font-size: 12px;">If you didn't request this, please ignore this email.</p>
+    </div>
+`;
 
 const sendVerificationEmail = async (email, name, token) => {
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
     const link = `${clientUrl}/verify-email?token=${token}`;
 
     if (!isEmailConfigured()) {
-        console.log(`\n=== EMAIL VERIFICATION (SMTP not configured) ===`);
+        console.log(`\n=== EMAIL VERIFICATION (no email provider configured) ===`);
         console.log(`To: ${email}`);
         console.log(`Verification link: ${link}`);
-        console.log(`============================================\n`);
+        console.log(`=========================================================\n`);
         return;
     }
 
-    const transporter = createTransporter();
-    if (!transporter) return;
-
-    await transporter.sendMail({
-        from: `"Vync" <${process.env.SMTP_USER}>`,
+    return sendEmail({
         to: email,
         subject: 'Verify your Vync account',
-        html: `
-            <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-                <h2 style="color: #22c55e;">Welcome to Vync!</h2>
-                <p>Hi ${name},</p>
-                <p>Click the button below to verify your email address:</p>
-                <a href="${link}" style="display: inline-block; padding: 12px 24px; background: #22c55e; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Verify Email</a>
-                <p style="color: #6b7280; font-size: 13px;">Or copy this link: ${link}</p>
-                <p style="color: #6b7280; font-size: 12px;">This link expires in 24 hours.</p>
-            </div>
-        `,
+        html: verificationTemplate(name, link),
     });
 };
 
@@ -61,31 +109,17 @@ const sendResetPasswordEmail = async (email, name, token) => {
     const link = `${clientUrl}/reset-password?token=${token}`;
 
     if (!isEmailConfigured()) {
-        console.log(`\n=== PASSWORD RESET (SMTP not configured) ===`);
+        console.log(`\n=== PASSWORD RESET (no email provider configured) ===`);
         console.log(`To: ${email}`);
         console.log(`Reset link: ${link}`);
-        console.log(`============================================\n`);
+        console.log(`====================================================\n`);
         return;
     }
 
-    const transporter = createTransporter();
-    if (!transporter) return;
-
-    await transporter.sendMail({
-        from: `"Vync" <${process.env.SMTP_USER}>`,
+    return sendEmail({
         to: email,
         subject: 'Reset your Vync password',
-        html: `
-            <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-                <h2 style="color: #22c55e;">Password Reset Request</h2>
-                <p>Hi ${name},</p>
-                <p>You requested to reset your password. Click the button below to set a new password:</p>
-                <a href="${link}" style="display: inline-block; padding: 12px 24px; background: #22c55e; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Reset Password</a>
-                <p style="color: #6b7280; font-size: 13px;">Or copy this link: ${link}</p>
-                <p style="color: #6b7280; font-size: 12px;">This link expires in 1 hour.</p>
-                <p style="color: #6b7280; font-size: 12px;">If you didn't request this, please ignore this email.</p>
-            </div>
-        `,
+        html: resetTemplate(name, link),
     });
 };
 
@@ -98,9 +132,26 @@ const tcpConnectTest = (host, port, family) => new Promise((resolve) => {
 });
 
 const verifySmtp = async () => {
+    const provider = emailProvider();
+    const result = { provider, configured: isEmailConfigured() };
+
+    if (provider === 'brevo') {
+        result.sender = senderEmail();
+        result.note = 'Using Brevo HTTPS API — no SMTP ports involved';
+        try {
+            const res = await fetch('https://api.brevo.com/v3/account', {
+                headers: { 'api-key': process.env.BREVO_API_KEY, 'accept': 'application/json' },
+            });
+            result.brevoApi = res.ok ? 'OK' : `HTTP ${res.status}`;
+        } catch (e) {
+            result.brevoApi = e.message;
+        }
+        return result;
+    }
+
     const host = process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = parseInt(process.env.SMTP_PORT || '587');
-    const result = { configured: isEmailConfigured(), host, port };
+    Object.assign(result, { host, port });
 
     try { result.dnsA_ipv4 = await dns.promises.resolve4(host); } catch (e) { result.dnsA_ipv4 = e.code; }
     try { result.dnsAAAA_ipv6 = await dns.promises.resolve6(host); } catch (e) { result.dnsAAAA_ipv6 = e.code; }
@@ -113,13 +164,7 @@ const verifySmtp = async () => {
         result.tcp6 = await tcpConnectTest(result.dnsAAAA_ipv6[0], 587, 6);
     }
 
-    if (!isEmailConfigured()) {
-        result.smtpVerify = 'SMTP not configured (SMTP_HOST/SMTP_USER/SMTP_PASS missing)';
-        return result;
-    }
-
     const transporter = createTransporter();
-    if (!transporter) { result.smtpVerify = 'Transporter not created'; return result; }
     try {
         await transporter.verify();
         result.smtpVerify = 'OK';
@@ -132,20 +177,17 @@ const verifySmtp = async () => {
 };
 
 const sendTestEmail = async (to) => {
-    const transporter = createTransporter();
-    if (!transporter) return { ok: false, error: 'Transporter not created' };
+    if (!isEmailConfigured()) return { ok: false, error: 'No email provider configured' };
     try {
-        const info = await transporter.sendMail({
-            from: `"Vync" <${process.env.SMTP_USER}>`,
+        const info = await sendEmail({
             to,
-            subject: 'Vync SMTP delivery test',
-            text: `If you received this, SMTP sending from the server works. (${new Date().toISOString()})`,
+            subject: 'Vync delivery test',
+            text: '',
+            html: `<p>If you received this, email sending works. (${new Date().toISOString()})</p>`,
         });
-        return { ok: true, messageId: info.messageId, accepted: info.accepted, response: info.response };
+        return { ok: true, messageId: info?.messageId, response: info?.response };
     } catch (err) {
-        return { ok: false, error: err.message, code: err.code, response: err.response };
-    } finally {
-        transporter.close();
+        return { ok: false, error: err.message, code: err.code };
     }
 };
 
