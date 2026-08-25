@@ -5,9 +5,6 @@ function Login() {
   const navigate = useNavigate();
   const [user, setUser] = useState({ email: "", password: "" });
   const [message, setMessage] = useState("");
-  const [needsVerification, setNeedsVerification] = useState(false);
-  const [verifyEmail, setVerifyEmail] = useState("");
-  const [resending, setResending] = useState(false);
 
   const handleChange = (e) => {
     setUser({ ...user, [e.target.name]: e.target.value });
@@ -16,7 +13,6 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
-    setNeedsVerification(false);
 
     try {
       const response = await fetch("/api/users/login", {
@@ -34,31 +30,13 @@ function Login() {
         localStorage.setItem("user", JSON.stringify(userData));
         navigate("/dashboard");
       } else if (data.needsVerification) {
-        setNeedsVerification(true);
-        setVerifyEmail(data.email);
-        setMessage(data.message);
+        navigate(`/verify-email?email=${encodeURIComponent(data.email)}`);
       } else {
         setMessage(data.message || "Invalid Credentials");
       }
     } catch (error) {
       setMessage("Server Error");
     }
-  };
-
-  const handleResend = async () => {
-    setResending(true);
-    try {
-      const res = await fetch("/api/users/resend-verification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: verifyEmail }),
-      });
-      const data = await res.json();
-      setMessage(data.message || "Verification email resent!");
-    } catch (e) {
-      setMessage("Failed to resend");
-    }
-    setResending(false);
   };
 
   return (
@@ -82,13 +60,6 @@ function Login() {
         <p className="forgot-link"><Link to="/forgot-password">Forgot password?</Link></p>
         <p>Don't have an account? <Link to="/">Register</Link></p>
       </form>
-      {needsVerification && (
-        <div style={{ marginTop: 16, textAlign: "center" }}>
-          <button onClick={handleResend} disabled={resending} className="small-btn" style={{ fontSize: 12 }}>
-            {resending ? "Sending..." : "Resend verification email"}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

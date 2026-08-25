@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 
 function Register() {
+  const navigate = useNavigate();
   const [user, setUser] = useState({
     name: "",
     email: "",
@@ -10,7 +11,6 @@ function Register() {
     confirmPassword: "",
   });
   const [message, setMessage] = useState("");
-  const [registered, setRegistered] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -37,8 +37,11 @@ function Register() {
       const data = await response.json();
 
       if (response.ok) {
-        setRegistered(true);
-        setMessage(data.message || "Registration successful!");
+        if (data.message.includes("email") || data.message.includes("verification")) {
+          navigate(`/verify-email?email=${encodeURIComponent(user.email)}`);
+        } else {
+          navigate("/login");
+        }
       } else {
         setMessage(data.message || "Registration Failed");
       }
@@ -46,22 +49,6 @@ function Register() {
       setMessage("Server Error");
     }
   };
-
-  if (registered) {
-    return (
-      <div className="register-container" style={{ textAlign: "center" }}>
-        <h2>Registration Complete</h2>
-        <div style={{ fontSize: 48, margin: "24px 0" }}>📧</div>
-        <p style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.6, marginBottom: 8 }}>{message}</p>
-        <p style={{ fontSize: 13, color: "#9ca3af" }}>
-          {message.includes("email") ? "Check your inbox (and spam folder) for the verification link." : "You can now log in."}
-        </p>
-        <p style={{ marginTop: 20 }}>
-          <Link to="/login" style={{ display: "inline-block", padding: "12px 24px", background: "#22c55e", color: "#fff", borderRadius: 8, textDecoration: "none", fontWeight: 600 }}>Go to Login</Link>
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="register-container">

@@ -4,34 +4,54 @@ import net from 'node:net';
 
 dns.setDefaultResultOrder('ipv4first');
 
-const emailProvider = () => {
-    if (process.env.BREVO_API_KEY) return 'brevo';
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return 'smtp';
-    return null;
+const isGmailAPI = () => Boolean(process.env.GMAIL_REFRESH_TOKEN && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+const isSmtp = () => Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+const emailProvider = () => (isGmailAPI() ? 'gmail-api' : isSmtp() ? 'smtp' : null);
+const isEmailConfigured = () => Boolean(emailProvider());
+const senderEmail = () => process.env.SMTP_USER || 'codepankaj84@gmail.com';
+
+const getAccessToken = async () => {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            client_id: process.env.GOOGLE_CLIENT_ID,
+            client_secret: process.env.GOOGLE_CLIENT_SECRET,
+            refresh_token: process.env.GMAIL_REFRESH_TOKEN,
+            grant_type: 'refresh_token',
+        }),
+    });
+    if (!res.ok) throw new Error(`Token exchange failed: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    return data.access_token;
 };
 
-const isEmailConfigured = () => Boolean(emailProvider());
+const sendViaGmailAPI = async ({ to, subject, html }) => {
+    const accessToken = await getAccessToken();
+    const from = senderEmail();
+    const emailParts = [
+        `From: Vync <${from}>`,
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        Buffer.from(html).toString('base64'),
+    ];
+    const raw = Buffer.from(emailParts.join('\r\n')).toString('base64url');
 
-const senderEmail = () => process.env.BREVO_SENDER || process.env.SMTP_USER || '';
-
-const sendViaBrevo = async ({ to, subject, html }) => {
-    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
         method: 'POST',
         headers: {
-            'api-key': process.env.BREVO_API_KEY,
-            'content-type': 'application/json',
-            'accept': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-            sender: { name: 'Vync', email: senderEmail() },
-            to: [{ email: to }],
-            subject,
-            htmlContent: html,
-        }),
+        body: JSON.stringify({ raw }),
     });
     if (!res.ok) {
         const body = await res.text();
-        throw new Error(`Brevo API ${res.status}: ${body.slice(0, 300)}`);
+        throw new Error(`Gmail API ${res.status}: ${body.slice(0, 300)}`);
     }
     return res.json();
 };
@@ -50,76 +70,54 @@ const createTransporter = () => nodemailer.createTransport({
 });
 
 const sendEmail = async ({ to, subject, html }) => {
-    const provider = emailProvider();
-    if (provider === 'brevo') return sendViaBrevo({ to, subject, html });
-
+    if (isGmailAPI()) return sendViaGmailAPI({ to, subject, html });
     const transporter = createTransporter();
     return transporter.sendMail({
-        from: `"Vync" <${process.env.SMTP_USER}>`,
+        from: `"Vync" <${senderEmail()}>`,
         to,
         subject,
         html,
     });
 };
 
-const verificationTemplate = (name, link) => `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-        <h2 style="color: #22c55e;">Welcome to Vync!</h2>
-        <p>Hi ${name},</p>
-        <p>Click the button below to verify your email address:</p>
-        <a href="${link}" style="display: inline-block; padding: 12px 24px; background: #22c55e; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Verify Email</a>
-        <p style="color: #6b7280; font-size: 13px;">Or copy this link: ${link}</p>
-        <p style="color: #6b7280; font-size: 12px;">This link expires in 24 hours.</p>
+const otpTemplate = (name, otp, purpose) => `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; text-align: center;">
+        <h2 style="color: #22c55e;">Vync</h2>
+        <p style="font-size: 15px; color: #374151;">Hi ${name},</p>
+        <p style="font-size: 14px; color: #6b7280;">Your ${purpose} code is:</p>
+        <div style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #111827; margin: 24px 0; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">${otp}</div>
+        <p style="font-size: 13px; color: #9ca3af;">This code expires in 10 minutes.</p>
+        <p style="font-size: 13px; color: #9ca3af;">Do not share this code with anyone.</p>
     </div>
 `;
 
-const resetTemplate = (name, link) => `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-        <h2 style="color: #22c55e;">Password Reset Request</h2>
-        <p>Hi ${name},</p>
-        <p>You requested to reset your password. Click the button below to set a new password:</p>
-        <a href="${link}" style="display: inline-block; padding: 12px 24px; background: #22c55e; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Reset Password</a>
-        <p style="color: #6b7280; font-size: 13px;">Or copy this link: ${link}</p>
-        <p style="color: #6b7280; font-size: 12px;">This link expires in 1 hour.</p>
-        <p style="color: #6b7280; font-size: 12px;">If you didn't request this, please ignore this email.</p>
-    </div>
-`;
-
-const sendVerificationEmail = async (email, name, token) => {
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const link = `${clientUrl}/verify-email?token=${token}`;
-
+const sendVerificationOTP = async (email, name, otp) => {
     if (!isEmailConfigured()) {
-        console.log(`\n=== EMAIL VERIFICATION (no email provider configured) ===`);
+        console.log(`\n=== EMAIL VERIFICATION OTP (no email provider configured) ===`);
         console.log(`To: ${email}`);
-        console.log(`Verification link: ${link}`);
-        console.log(`=========================================================\n`);
+        console.log(`OTP: ${otp}`);
+        console.log(`============================================================\n`);
         return;
     }
-
     return sendEmail({
         to: email,
-        subject: 'Verify your Vync account',
-        html: verificationTemplate(name, link),
+        subject: 'Your Vync verification code',
+        html: otpTemplate(name, otp, 'verification'),
     });
 };
 
-const sendResetPasswordEmail = async (email, name, token) => {
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const link = `${clientUrl}/reset-password?token=${token}`;
-
+const sendResetPasswordOTP = async (email, name, otp) => {
     if (!isEmailConfigured()) {
-        console.log(`\n=== PASSWORD RESET (no email provider configured) ===`);
+        console.log(`\n=== PASSWORD RESET OTP (no email provider configured) ===`);
         console.log(`To: ${email}`);
-        console.log(`Reset link: ${link}`);
-        console.log(`====================================================\n`);
+        console.log(`OTP: ${otp}`);
+        console.log(`========================================================\n`);
         return;
     }
-
     return sendEmail({
         to: email,
-        subject: 'Reset your Vync password',
-        html: resetTemplate(name, link),
+        subject: 'Your Vync password reset code',
+        html: otpTemplate(name, otp, 'password reset'),
     });
 };
 
@@ -135,19 +133,19 @@ const verifySmtp = async () => {
     const provider = emailProvider();
     const result = { provider, configured: isEmailConfigured() };
 
-    if (provider === 'brevo') {
+    if (provider === 'gmail-api') {
         result.sender = senderEmail();
-        result.note = 'Using Brevo HTTPS API — no SMTP ports involved';
+        result.note = 'Using Gmail API via HTTPS — no SMTP ports involved';
         try {
-            const res = await fetch('https://api.brevo.com/v3/account', {
-                headers: { 'api-key': process.env.BREVO_API_KEY, 'accept': 'application/json' },
-            });
-            result.brevoApi = res.ok ? 'OK' : `HTTP ${res.status}`;
+            await getAccessToken();
+            result.tokenRefresh = 'OK';
         } catch (e) {
-            result.brevoApi = e.message;
+            result.tokenRefresh = e.message;
         }
         return result;
     }
+
+    if (!provider) return result;
 
     const host = process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = parseInt(process.env.SMTP_PORT || '587');
@@ -164,14 +162,13 @@ const verifySmtp = async () => {
         result.tcp6 = await tcpConnectTest(result.dnsAAAA_ipv6[0], 587, 6);
     }
 
-    const transporter = createTransporter();
     try {
-        await transporter.verify();
+        const t = createTransporter();
+        await t.verify();
         result.smtpVerify = 'OK';
+        t.close();
     } catch (err) {
         result.smtpVerify = { error: err.message, code: err.code, response: err.response };
-    } finally {
-        transporter.close();
     }
     return result;
 };
@@ -182,13 +179,12 @@ const sendTestEmail = async (to) => {
         const info = await sendEmail({
             to,
             subject: 'Vync delivery test',
-            text: '',
             html: `<p>If you received this, email sending works. (${new Date().toISOString()})</p>`,
         });
-        return { ok: true, messageId: info?.messageId, response: info?.response };
+        return { ok: true, messageId: info?.messageId || info?.id, response: info?.response };
     } catch (err) {
         return { ok: false, error: err.message, code: err.code };
     }
 };
 
-export { sendVerificationEmail, sendResetPasswordEmail, isEmailConfigured, verifySmtp, sendTestEmail };
+export { sendVerificationOTP, sendResetPasswordOTP, isEmailConfigured, verifySmtp, sendTestEmail };

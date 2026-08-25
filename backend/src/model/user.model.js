@@ -47,22 +47,22 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  verificationToken: {
+  verificationOTP: {
     type: String,
     default: null,
   },
-verificationExpires: {
-      type: Date,
-      default: null,
-    },
-    resetPasswordToken: {
-      type: String,
-      default: null,
-    },
-    resetPasswordExpires: {
-      type: Date,
-      default: null,
-    },
+  verificationOTPExpiry: {
+    type: Date,
+    default: null,
+  },
+  resetOTP: {
+    type: String,
+    default: null,
+  },
+  resetOTPExpiry: {
+    type: Date,
+    default: null,
+  },
 });
 
         userSchema.pre('save',async function() {
