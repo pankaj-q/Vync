@@ -50,10 +50,15 @@ function ChatWindow({
   const cameraInputRef = useRef(null);
   const [reactingMsgId, setReactingMsgId] = useState(null);
   const [showMore, setShowMore] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const pickerRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDur, setRecordingDur] = useState(0);
+  const [recordingBlob, setRecordingBlob] = useState(null);
+  const [recordingUrl, setRecordingUrl] = useState("");
+  const [sendingVoice, setSendingVoice] = useState(false);
   const mediaRecorderRef = useRef(null);
+  const discardRef = useRef(false);
   const audioChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
   const streamRef = useRef(null);
@@ -79,6 +84,7 @@ function ChatWindow({
   }, [reactingMsgId]);
 
   const startRecording = async () => {
+    cleanupRecordingPreview();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -86,30 +92,16 @@ function ChatWindow({
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      mediaRecorder.onstop = async () => {
+      mediaRecorder.onstop = () => {
         clearInterval(recordingTimerRef.current);
         setRecordingDur(0);
         setIsRecording(false);
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        if (discardRef.current) { discardRef.current = false; return; }
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const file = new File([blob], "voice.webm", { type: "audio/webm" });
-        const formData = new FormData();
-        formData.append("file", file);
-        try {
-          const res = await fetch("/api/files/upload", {
-            method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-            body: formData,
-          });
-          if (!res.ok) { showError("Upload failed"); stream.getTracks().forEach(t => t.stop()); return; }
-          const data = await res.json();
-          const body = { conversationId: activeChat._id, content: "", mediaUrl: data.file.url, messageType: "voice" };
-          const msgRes = await fetch("/api/messages", {
-            method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
-            body: JSON.stringify(body),
-          });
-          if (!msgRes.ok) showError("Failed to send voice message");
-          fetchConversations();
-        } catch (e) { showError("Upload failed"); }
-        stream.getTracks().forEach(t => t.stop());
+        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+        setRecordingBlob(blob);
+        setRecordingUrl(URL.createObjectURL(blob));
       };
       mediaRecorder.start();
       setIsRecording(true);
@@ -122,6 +114,49 @@ function ChatWindow({
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
+  };
+
+  const discardRecording = () => {
+    discardRef.current = mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive";
+    if (discardRef.current) {
+      mediaRecorderRef.current.stop();
+      return;
+    }
+    cleanupRecordingPreview();
+  };
+
+  const cleanupRecordingPreview = () => {
+    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    setRecordingUrl("");
+    setRecordingBlob(null);
+    setRecordingDur(0);
+    setIsRecording(false);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+  };
+
+  const sendVoice = async () => {
+    if (!recordingBlob || sendingVoice || !activeChat) return;
+    setSendingVoice(true);
+    const file = new File([recordingBlob], "voice.webm", { type: "audio/webm" });
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch("/api/files/upload", {
+        method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        body: formData,
+      });
+      if (!res.ok) { showError("Upload failed"); setSendingVoice(false); return; }
+      const data = await res.json();
+      const body = { conversationId: activeChat._id, content: "", mediaUrl: data.file.url, messageType: "voice" };
+      const msgRes = await fetch("/api/messages", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        body: JSON.stringify(body),
+      });
+      if (!msgRes.ok) showError("Failed to send voice message");
+      cleanupRecordingPreview();
+      fetchConversations();
+    } catch (e) { showError("Upload failed"); }
+    setSendingVoice(false);
   };
 
   const handleSearch = (value) => {
@@ -176,12 +211,12 @@ function ChatWindow({
               <button className="back-btn" onClick={() => setShowSidebar(true)} title="Back to conversations">
                 <ChevronLeft size={20} />
               </button>
-              <div className="chat-user-avatar">
+              <div className="chat-user-avatar" style={{ cursor: "pointer" }} onClick={() => setShowProfile(true)} title="View profile">
                 {getOtherParticipant(activeChat)?.avatarUrl
                   ? <img src={getOtherParticipant(activeChat).avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
                   : getOtherParticipant(activeChat)?.name?.[0] || "?"}
               </div>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, cursor: "pointer" }} onClick={() => setShowProfile(true)} title="View profile">
                 <div className="chat-user-name">{getOtherParticipant(activeChat)?.name || "Unknown"}</div>
                 <div className="chat-user-status">
                   {getOtherParticipant(activeChat) && isOnline(String(getOtherParticipant(activeChat)._id))
@@ -345,6 +380,20 @@ function ChatWindow({
             </motion.div>
           )}
         </AnimatePresence>
+        <AnimatePresence>
+          {recordingUrl && (
+            <motion.div className="voice-preview"
+              initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+              <audio src={recordingUrl} controls />
+              <span className="voice-preview-label">Review & send</span>
+              <button type="button" className="small-btn cancel" onClick={discardRecording} style={{ display: "flex", alignItems: "center", gap: 4 }}><X size={12} /> Cancel</button>
+              <button type="button" className="small-btn" onClick={sendVoice} disabled={sendingVoice}
+                style={{ background: "var(--accent)", color: "#fff", border: "none", display: "flex", alignItems: "center", gap: 4 }}>
+                <Send size={12} /> {sendingVoice ? "Sending..." : "Send"}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <form className="message-input-row" onSubmit={sendMessage}>
           <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" onChange={handleCameraCapture}
             style={{ position: 'fixed', top: '-100px', left: '-100px', opacity: 0, pointerEvents: 'none' }} />
@@ -404,6 +453,38 @@ function ChatWindow({
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showProfile && (() => {
+          const other = getOtherParticipant(activeChat);
+          return (
+            <motion.div className="modal-overlay" onClick={() => setShowProfile(false)}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <motion.div className="modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: "center", alignItems: "center" }}
+                initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}>
+                <div className="view-avatar">
+                  {other?.avatarUrl
+                    ? <img src={other.avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+                    : other?.name?.[0] || "?"}
+                </div>
+                <h3 style={{ marginTop: 4 }}>{other?.name || "Unknown"}</h3>
+                {other && (
+                  <span className={`status-badge ${isOnline(String(other._id)) ? "online" : "offline"}`}>
+                    {isOnline(String(other._id)) ? "Online" : "Offline"}
+                  </span>
+                )}
+                {other?.email && <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "6px 0 0" }}>{other.email}</p>}
+                {other?.bio ? (
+                  <p style={{ fontSize: 13, color: "var(--text-primary)", background: "var(--bg-deep)", padding: "10px 14px", borderRadius: "var(--radius-sm)", width: "100%" }}>{other.bio}</p>
+                ) : (
+                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>No bio yet</p>
+                )}
+                <button className="small-btn cancel" onClick={() => setShowProfile(false)} style={{ borderRadius: 8, marginTop: 8 }}>Close</button>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
     </>
   );
