@@ -176,7 +176,11 @@ function ChatWindow({
               <button className="back-btn" onClick={() => setShowSidebar(true)} title="Back to conversations">
                 <ChevronLeft size={20} />
               </button>
-              <div className="chat-user-avatar">{getOtherParticipant(activeChat)?.name?.[0] || "?"}</div>
+              <div className="chat-user-avatar">
+                {getOtherParticipant(activeChat)?.avatarUrl
+                  ? <img src={getOtherParticipant(activeChat).avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+                  : getOtherParticipant(activeChat)?.name?.[0] || "?"}
+              </div>
               <div style={{ flex: 1 }}>
                 <div className="chat-user-name">{getOtherParticipant(activeChat)?.name || "Unknown"}</div>
                 <div className="chat-user-status">
@@ -385,7 +389,9 @@ function ChatWindow({
                   const other = getOtherParticipant(c);
                   return (
                     <div key={c._id} className="forward-item" onClick={() => handleForward(showForward._id, c._id)}>
-                      <div className="forward-avatar">{other?.name?.[0] || "?"}</div>
+                      <div className="forward-avatar">
+                      {other?.avatarUrl ? <img src={other.avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} /> : other?.name?.[0] || "?"}
+                    </div>
                       <span>{other?.name || "Unknown"}</span>
                     </div>
                   );

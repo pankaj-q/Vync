@@ -10,7 +10,7 @@ const createOrGetConversation = async (req, res) => {
 
         const existing = await Conversation.findOne({
             participants: { $all: [req.user._id, participantId], $size: 2 }
-        }).populate('participants', 'name email avatar');
+        }).populate('participants', 'name email avatarUrl');
 
         if (existing) {
             return res.json({ conversation: existing });
@@ -21,7 +21,7 @@ const createOrGetConversation = async (req, res) => {
         });
 
         const populated = await Conversation.findById(conversation._id)
-            .populate('participants', 'name email avatar');
+            .populate('participants', 'name email avatarUrl');
 
         res.status(201).json({ conversation: populated });
     } catch (error) {
@@ -35,7 +35,7 @@ const getConversations = async (req, res) => {
         const conversations = await Conversation.find({
             participants: req.user._id
         })
-            .populate('participants', 'name email avatar')
+            .populate('participants', 'name email avatarUrl')
             .populate('lastMessage')
             .sort({ lastMessageAt: -1 });
 

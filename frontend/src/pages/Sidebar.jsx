@@ -106,7 +106,9 @@ function Sidebar({
             <motion.div className="search-results" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
               {users.map((u) => (
                 <div key={u._id} className="search-item" onClick={() => startConversation(u._id)}>
-                  <div className="search-avatar">{u.name?.[0]}</div>
+                  <div className="search-avatar">
+                    {u.avatarUrl ? <img src={u.avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} /> : u.name?.[0]}
+                  </div>
                   <div><div className="search-name">{u.name}</div><div className="search-email">{u.email}</div></div>
                 </div>
               ))}
@@ -124,7 +126,9 @@ function Sidebar({
                   initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
                   className={`conversation-item ${activeChat?._id === c._id ? "active" : ""}`}
                   onClick={() => { setActiveChat(c); setShowSidebar(false); socket.emit("join-conversation", c._id); fetchMessages(c._id); }}>
-                  <div className="conversation-avatar">{other?.name?.[0] || "?"}</div>
+                  <div className="conversation-avatar">
+                    {other?.avatarUrl ? <img src={other.avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} /> : other?.name?.[0] || "?"}
+                  </div>
                   <div className="conversation-info">
                     <div className="conversation-name">
                       {other?.name || "Unknown"}

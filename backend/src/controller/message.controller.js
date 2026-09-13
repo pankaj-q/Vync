@@ -37,7 +37,7 @@ const sendMessage = catchAsync(async (req, res) => {
     await conversation.save();
 
     const populated = await Message.findById(message._id)
-        .populate('sender', 'name email avatar');
+        .populate('sender', 'name email avatarUrl');
 
     const io = req.app.get('io');
     if (io) {
@@ -62,7 +62,7 @@ const getMessages = catchAsync(async (req, res) => {
     assertParticipant(conversation, req.user._id);
 
     const messages = await Message.find({ conversation: conversationId })
-        .populate('sender', 'name email avatar')
+        .populate('sender', 'name email avatarUrl')
         .populate('replyTo')
         .populate('reactions.user', 'name')
         .sort({ createdAt: -1 })
@@ -92,7 +92,7 @@ const editMessage = catchAsync(async (req, res) => {
     await message.save();
 
     const populated = await Message.findById(id)
-        .populate('sender', 'name email avatar')
+        .populate('sender', 'name email avatarUrl')
         .populate('replyTo');
 
     const io = req.app.get('io');
@@ -166,7 +166,7 @@ const forwardMessage = catchAsync(async (req, res) => {
     await conversation.save();
 
     const populated = await Message.findById(forwarded._id)
-        .populate('sender', 'name email avatar')
+        .populate('sender', 'name email avatarUrl')
         .populate('forwardedFrom');
 
     const io = req.app.get('io');
@@ -243,7 +243,7 @@ const searchMessages = catchAsync(async (req, res) => {
         content: { $regex: q.trim(), $options: 'i' },
         isDeleted: false,
     })
-        .populate('sender', 'name email avatar')
+        .populate('sender', 'name email avatarUrl')
         .populate('replyTo')
         .sort({ createdAt: -1 })
         .limit(30);
