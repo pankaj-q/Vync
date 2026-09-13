@@ -151,6 +151,11 @@ const loginUser = catchAsync(async (req, res) => {
     }
 
     if (!user.isVerified && isEmailConfigured()) {
+        const otp = generateOTP();
+        user.verificationOTP = otp;
+        user.verificationOTPExpiry = new Date(Date.now() + 10 * 60 * 1000);
+        await user.save();
+        sendVerificationOTP(email, user.name, otp).catch((err) => console.error('Email send failed:', err));
         return res.status(403).json({
             message: "Please verify your email before logging in",
             needsVerification: true,
