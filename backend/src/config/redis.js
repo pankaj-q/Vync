@@ -9,12 +9,16 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
             port: parseInt(process.env.REDIS_PORT || '6379'),
             password: process.env.REDIS_PASSWORD || undefined,
             retryStrategy: (times) => {
-                const delay = Math.min(times * 50, 2000);
-                return delay;
+                if (times > 3) {
+                    console.warn('Redis: max connection retries reached, giving up');
+                    return null; // stop retrying
+                }
+                return Math.min(times * 100, 1000);
             },
             maxRetriesPerRequest: 3,
             enableReadyCheck: true,
             lazyConnect: true,
+            connectTimeout: 5000,
         },
     );
 
@@ -24,6 +28,10 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
 
     redis.on('error', (err) => {
         console.error('Redis error (non-fatal):', err.message);
+    });
+
+    redis.on('close', () => {
+        console.log('Redis connection closed');
     });
 
     // Connect lazily, don't crash on failure
