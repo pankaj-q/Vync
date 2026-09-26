@@ -156,6 +156,7 @@ const loginUser = catchAsync(async (req, res) => {
             { _id: user._id },
             { $set: { verificationOTP: otp, verificationOTPExpiry: new Date(Date.now() + 10 * 60 * 1000) } }
         );
+        // Fire-and-forget: don't block login on email
         sendVerificationOTP(email, user.name, otp).catch((err) => console.error('Email send failed:', err));
         return res.status(403).json({
             message: "Please verify your email before logging in",
