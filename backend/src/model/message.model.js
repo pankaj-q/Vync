@@ -52,6 +52,7 @@ const messageSchema = new mongoose.Schema({
         emoji: { type: String }
     }]
 }, { timestamps: true });
+messageSchema.index({conversation: 1, createdAt: 1});
 
 const Message = mongoose.model('Message', messageSchema);
 export default Message;
