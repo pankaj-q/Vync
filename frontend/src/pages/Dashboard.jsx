@@ -69,6 +69,7 @@ function Dashboard() {
   const activeChatRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const sendingRef = useRef(false);
+  const lastFetchedConvRef = useRef(null);
 
   const userId = getUserIdFromToken();
 
@@ -96,18 +97,41 @@ function Dashboard() {
 
   const fetchMessages = useCallback(async (conversationId) => {
     seenMessageIds = new Set();
+    lastFetchedConvRef.current = conversationId;
     setLoadingMessages(true);
     try {
       const res = await fetch(`/api/messages/${conversationId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
-      if (!res.ok) { showError("Failed to load messages"); return; }
+      if (!res.ok) { if (lastFetchedConvRef.current === conversationId) showError("Failed to load messages"); return; }
       const data = await res.json();
+      if (lastFetchedConvRef.current !== conversationId) return;
       setMessages(data.messages || []);
       markAsRead(conversationId);
-    } catch (e) { showError("Failed to load messages"); }
-    finally { setLoadingMessages(false); }
+    } catch (e) { if (lastFetchedConvRef.current === conversationId) showError("Failed to load messages"); }
+    finally { if (lastFetchedConvRef.current === conversationId) setLoadingMessages(false); }
   }, []);
+
+  const bumpConversation = useCallback((conversationId, lastMessage) => {
+    setConversations((prev) => {
+      const idx = prev.findIndex((c) => String(c._id) === String(conversationId));
+      if (idx === -1) return prev;
+      const updated = [...prev];
+      const conv = { ...updated[idx], lastMessage, lastMessageAt: lastMessage?.createdAt || new Date() };
+      updated.splice(idx, 1);
+      updated.unshift(conv);
+      return updated;
+    });
+  }, []);
+
+  const openConversation = useCallback((conv) => {
+    const currentId = activeChatRef.current?._id;
+    setReplyTo(null); setEditingMsg(null); setEditText("");
+    setActiveChat(conv);
+    if (currentId !== conv._id) setMessages([]);
+    getSocket().emit("join-conversation", conv._id);
+    fetchMessages(conv._id);
+  }, [fetchMessages]);
 
   const markAsRead = async (conversationId) => {
     try {
@@ -154,11 +178,9 @@ function Dashboard() {
       const current = activeChatRef.current;
       if (current && String(msg.conversation) === String(current._id)) {
         addMessages([msg]);
-      }
-      fetchConversations();
-      if (current && String(msg.conversation) === String(current._id)) {
         markAsRead(current._id);
       }
+      bumpConversation(msg.conversation, msg);
     };
 
     const onEdited = (msg) => {
@@ -196,7 +218,6 @@ function Dashboard() {
         String(m.sender?._id || m.sender) !== uid
           ? { ...m, status: "read" } : m
       ));
-      fetchConversations();
     };
 
     skt.on("new-message", onNewMessage);
@@ -248,7 +269,7 @@ function Dashboard() {
       if (!res.ok) { showError("Failed to create conversation"); return; }
       const data = await res.json();
       if (data.conversation) {
-        setActiveChat(data.conversation); setUsers([]); setSearchQuery("");
+        setActiveChat(data.conversation); setMessages([]); setUsers([]); setSearchQuery("");
         getSocket().emit("join-conversation", data.conversation._id);
         fetchMessages(data.conversation._id); fetchConversations();
       }
@@ -300,26 +321,52 @@ function Dashboard() {
     e.preventDefault();
     if ((!messageText.trim() && !mediaPreview) || !activeChat || sendingRef.current) return;
     sendingRef.current = true;
-    getSocket().emit("typing", { conversationId: activeChat._id, isTyping: false });
-    const body = { conversationId: activeChat._id, content: messageText || "" };
+    const convId = activeChat._id;
+    getSocket().emit("typing", { conversationId: convId, isTyping: false });
+    const body = { conversationId: convId, content: messageText || "" };
+    let mediaType = "text";
     if (mediaPreview) {
       body.mediaUrl = mediaPreview.url;
-      body.messageType = mediaPreview.mimetype.startsWith("image/") ? "image"
+      mediaType = mediaPreview.mimetype.startsWith("image/") ? "image"
         : mediaPreview.mimetype.startsWith("video/") ? "video"
         : mediaPreview.mimetype.startsWith("audio/") ? "audio" : "document";
+      body.messageType = mediaType;
     }
     if (replyTo) body.replyTo = replyTo._id;
     const text = messageText;
+    const tempMsg = {
+      _id: "temp-" + Date.now() + "-" + Math.round(Math.random() * 1e6),
+      conversation: convId,
+      content: text || (mediaPreview
+        ? (mediaType === "image" ? "📷 Photo" : mediaType === "video" ? "🎥 Video" : mediaType === "audio" ? "🎵 Audio" : "📄 Document")
+        : ""),
+      mediaUrl: mediaPreview?.url || null,
+      messageType: mediaType,
+      sender: { _id: userId, name: user?.name || "You", avatarUrl: user?.avatarUrl },
+      createdAt: new Date().toISOString(),
+      status: "sending",
+      isTemp: true,
+    };
+    setMessages((prev) => [...prev, tempMsg]);
     setMessageText(""); setReplyTo(null); setMediaPreview(null);
     try {
       const res = await fetch("/api/messages", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
         body: JSON.stringify(body),
       });
-      if (!res.ok) { showError("Failed to send message"); setMessageText(text); return; }
+      if (!res.ok) {
+        setMessages((prev) => prev.filter((m) => m._id !== tempMsg._id));
+        showError("Failed to send message"); setMessageText(text); return;
+      }
       const data = await res.json();
-      if (data.message) { addMessages([data.message]); fetchConversations(); }
-    } catch (e) { showError("Failed to send message"); setMessageText(text); }
+      if (data.message) {
+        setMessages((prev) => prev.map((m) => m._id === tempMsg._id ? data.message : m));
+        bumpConversation(convId, data.message);
+      }
+    } catch (err) {
+      setMessages((prev) => prev.filter((m) => m._id !== tempMsg._id));
+      showError("Failed to send message"); setMessageText(text);
+    }
     finally { sendingRef.current = false; }
   };
 
@@ -418,7 +465,6 @@ function Dashboard() {
           setUser={setUser}
           conversations={conversations}
           activeChat={activeChat}
-          setActiveChat={setActiveChat}
           userId={userId}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
@@ -427,9 +473,8 @@ function Dashboard() {
 onlineUsers={onlineUsers}
             showSidebar={showSidebar}
             setShowSidebar={setShowSidebar}
-            socket={getSocket()}
             loading={loadingConversations}
-          fetchMessages={fetchMessages}
+          openConversation={openConversation}
           searchUsers={searchUsers}
           startConversation={startConversation}
           showError={showError}
@@ -457,7 +502,7 @@ onlineUsers={onlineUsers}
             socket={getSocket()}
             setShowSidebar={setShowSidebar}
             sendMessage={sendMessage}
-            fetchConversations={fetchConversations}
+            bumpConversation={bumpConversation}
             handleTyping={handleTyping}
             handleEdit={handleEdit}
             handleDelete={handleDelete}

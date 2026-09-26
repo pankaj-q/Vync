@@ -32,9 +32,10 @@ const sendMessage = catchAsync(async (req, res) => {
         replyTo: replyTo || null
     });
 
-    conversation.lastMessage = message._id;
-    conversation.lastMessageAt = new Date();
-    await conversation.save();
+    await Conversation.updateOne(
+        { _id: conversationId },
+        { $set: { lastMessage: message._id, lastMessageAt: new Date() } }
+    );
 
     const populated = await Message.findById(message._id)
         .populate('sender', 'name email avatarUrl');
@@ -161,9 +162,10 @@ const forwardMessage = catchAsync(async (req, res) => {
         forwardedFrom: messageId,
     });
 
-    conversation.lastMessage = forwarded._id;
-    conversation.lastMessageAt = new Date();
-    await conversation.save();
+    await Conversation.updateOne(
+        { _id: targetConversationId },
+        { $set: { lastMessage: forwarded._id, lastMessageAt: new Date() } }
+    );
 
     const populated = await Message.findById(forwarded._id)
         .populate('sender', 'name email avatarUrl')

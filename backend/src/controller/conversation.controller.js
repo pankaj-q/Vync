@@ -8,17 +8,30 @@ const createOrGetConversation = async (req, res) => {
             return res.status(400).json({ message: "Participant ID is required" });
         }
 
-        const existing = await Conversation.findOne({
-            participants: { $all: [req.user._id, participantId], $size: 2 }
-        }).populate('participants', 'name email avatarUrl bio');
+        const key = [req.user._id, participantId].map(String).sort().join(':');
 
-        if (existing) {
-            return res.json({ conversation: existing });
+        let conversation = await Conversation.findOne({ conversationKey: key })
+            .populate('participants', 'name email avatarUrl bio');
+
+        if (conversation) {
+            return res.json({ conversation });
         }
 
-        const conversation = await Conversation.create({
-            participants: [req.user._id, participantId]
-        });
+        try {
+            conversation = await Conversation.create({
+                participants: [req.user._id, participantId],
+                conversationKey: key
+            });
+        } catch (error) {
+            if (error.code === 11000) {
+                conversation = await Conversation.findOne({ conversationKey: key })
+                    .populate('participants', 'name email avatarUrl bio');
+                if (conversation) {
+                    return res.json({ conversation });
+                }
+            }
+            throw error;
+        }
 
         const populated = await Conversation.findById(conversation._id)
             .populate('participants', 'name email avatarUrl bio');

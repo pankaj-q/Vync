@@ -41,7 +41,7 @@ function ChatWindow({
   getOtherParticipant,
   isOnline,
   getTypingText,
-  fetchConversations,
+  bumpConversation,
   loadingMessages,
 }) {
   const messagesEndRef = useRef(null);
@@ -152,9 +152,10 @@ function ChatWindow({
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
         body: JSON.stringify(body),
       });
-      if (!msgRes.ok) showError("Failed to send voice message");
+      if (!msgRes.ok) { showError("Failed to send voice message"); setSendingVoice(false); return; }
+      const msgData = await msgRes.json();
+      if (msgData.message) bumpConversation(activeChat._id, msgData.message);
       cleanupRecordingPreview();
-      fetchConversations();
     } catch (e) { showError("Upload failed"); }
     setSendingVoice(false);
   };

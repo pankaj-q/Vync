@@ -7,7 +7,6 @@ function Sidebar({
   setUser,
   conversations,
   activeChat,
-  setActiveChat,
   userId,
   searchQuery,
   setSearchQuery,
@@ -16,8 +15,7 @@ function Sidebar({
   onlineUsers,
   showSidebar,
   setShowSidebar,
-  socket,
-  fetchMessages,
+  openConversation,
   searchUsers,
   startConversation,
   showError,
@@ -125,7 +123,7 @@ function Sidebar({
                 <motion.div key={c._id}
                   initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
                   className={`conversation-item ${activeChat?._id === c._id ? "active" : ""}`}
-                  onClick={() => { setActiveChat(c); setShowSidebar(false); socket.emit("join-conversation", c._id); fetchMessages(c._id); }}>
+                  onClick={() => { openConversation(c); setShowSidebar(false); }}>
                   <div className="conversation-avatar">
                     {other?.avatarUrl ? <img src={other.avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} /> : other?.name?.[0] || "?"}
                   </div>
