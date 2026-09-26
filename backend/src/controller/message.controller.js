@@ -55,7 +55,7 @@ const sendMessage = catchAsync(async (req, res) => {
 const getMessages = catchAsync(async (req, res) => {
     const { conversationId } = req.params;
     const page = parseInt(req.query.page) || 1;
-    const limit = 50;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
     const skip = (page - 1) * limit;
 
     const conversation = await Conversation.findById(conversationId);
@@ -63,12 +63,13 @@ const getMessages = catchAsync(async (req, res) => {
     assertParticipant(conversation, req.user._id);
 
     const messages = await Message.find({ conversation: conversationId })
-        .populate('sender', 'name email avatarUrl')
-        .populate('replyTo')
+        .populate('sender', 'name avatarUrl')
+        .populate('replyTo', 'content sender')
         .populate('reactions.user', 'name')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit);
+        .limit(limit)
+        .lean();
 
     res.json({ messages: messages.reverse() });
 });

@@ -186,15 +186,14 @@ const loginUser = catchAsync(async (req, res) => {
 
 const searchUsers = catchAsync(async (req, res) => {
     const { q } = req.query;
-    if (!q) return res.json({ users: [] });
+    if (!q || !q.trim()) return res.json({ users: [] });
 
     const users = await User.find({
         _id: { $ne: req.user._id },
-        $or: [
-            { name: { $regex: q, $options: 'i' } },
-            { email: { $regex: q, $options: 'i' } }
-        ]
-    }).select('name email avatarUrl bio');
+        $text: { $search: q.trim() }
+    }).select('name email avatarUrl bio')
+    .limit(20)
+    .lean();
     res.json({ users });
 });
 

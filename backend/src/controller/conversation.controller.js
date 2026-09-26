@@ -45,14 +45,33 @@ const createOrGetConversation = async (req, res) => {
 
 const getConversations = async (req, res) => {
     try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = Math.min(parseInt(req.query.limit) || 25, 50);
+        const skip = (page - 1) * limit;
+
         const conversations = await Conversation.find({
             participants: req.user._id
         })
-            .populate('participants', 'name email avatarUrl bio')
-            .populate('lastMessage')
-            .sort({ lastMessageAt: -1 });
+            .populate('participants', 'name avatarUrl')
+            .sort({ lastMessageAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
 
-        res.json({ conversations });
+        // Add last message preview without full populate
+        const conversationIds = conversations.map(c => c._id);
+        const lastMessages = await Message.find({
+            _id: { $in: conversations.map(c => c.lastMessage).filter(Boolean) }
+        }).select('content createdAt messageType mediaUrl').lean();
+
+        const lastMsgMap = new Map(lastMessages.map(m => [String(m._id), m]));
+
+        const enriched = conversations.map(c => ({
+            ...c,
+            lastMessage: c.lastMessage ? lastMsgMap.get(String(c.lastMessage)) : null
+        }));
+
+        res.json({ conversations: enriched, page, limit });
     } catch (error) {
         console.error("Get conversations error:", error);
         res.status(500).json({ message: "Server error" });
