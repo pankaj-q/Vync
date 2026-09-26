@@ -22,6 +22,7 @@ function Sidebar({
   getOtherParticipant,
   isOnline,
   loading,
+  preFetchMessages,
 }) {
   const [showProfile, setShowProfile] = useState(false);
   const [profileName, setProfileName] = useState("");
@@ -123,6 +124,7 @@ function Sidebar({
                 <motion.div key={c._id}
                   initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
                   className={`conversation-item ${activeChat?._id === c._id ? "active" : ""}`}
+                  onMouseEnter={() => preFetchMessages(c._id)}
                   onClick={() => { openConversation(c); setShowSidebar(false); }}>
                   <div className="conversation-avatar">
                     {other?.avatarUrl ? <img src={other.avatarUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} /> : other?.name?.[0] || "?"}

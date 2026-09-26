@@ -70,6 +70,7 @@ function Dashboard() {
   const typingTimeoutRef = useRef(null);
   const sendingRef = useRef(false);
   const lastFetchedConvRef = useRef(null);
+  const messageCacheRef = useRef(new Map());
 
   const userId = getUserIdFromToken();
 
@@ -98,18 +99,42 @@ function Dashboard() {
   const fetchMessages = useCallback(async (conversationId) => {
     seenMessageIds = new Set();
     lastFetchedConvRef.current = conversationId;
-    setLoadingMessages(true);
+    
+    // INSTANT: serve from cache if available
+    const cached = messageCacheRef.current.get(conversationId);
+    if (cached && cached.length > 0) {
+      setMessages(cached);
+      setLoadingMessages(false);
+    } else {
+      setLoadingMessages(true);
+    }
+    
     try {
-      const res = await fetch(`/api/messages/${conversationId}`, {
+      const res = await fetch(`/api/messages/${conversationId}?limit=30`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       if (!res.ok) { if (lastFetchedConvRef.current === conversationId) showError("Failed to load messages"); return; }
       const data = await res.json();
       if (lastFetchedConvRef.current !== conversationId) return;
-      setMessages(data.messages || []);
+      const msgs = data.messages || [];
+      messageCacheRef.current.set(conversationId, msgs);
+      setMessages(msgs);
       markAsRead(conversationId);
     } catch (e) { if (lastFetchedConvRef.current === conversationId) showError("Failed to load messages"); }
     finally { if (lastFetchedConvRef.current === conversationId) setLoadingMessages(false); }
+  }, []);
+
+  const preFetchMessages = useCallback(async (conversationId) => {
+    if (messageCacheRef.current.has(conversationId)) return; // already cached
+    try {
+      const res = await fetch(`/api/messages/${conversationId}?limit=30`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        messageCacheRef.current.set(conversationId, data.messages || []);
+      }
+    } catch (e) { /* silent */ }
   }, []);
 
   const bumpConversation = useCallback((conversationId, lastMessage) => {
@@ -179,6 +204,12 @@ function Dashboard() {
       if (current && String(msg.conversation) === String(current._id)) {
         addMessages([msg]);
         markAsRead(current._id);
+      }
+      // Update cache
+      const cached = messageCacheRef.current.get(msg.conversation);
+      if (cached) {
+        const exists = cached.some(m => m._id === msg._id);
+        if (!exists) messageCacheRef.current.set(msg.conversation, [...cached, msg]);
       }
       bumpConversation(msg.conversation, msg);
     };
@@ -361,6 +392,9 @@ function Dashboard() {
       const data = await res.json();
       if (data.message) {
         setMessages((prev) => prev.map((m) => m._id === tempMsg._id ? data.message : m));
+        // Update cache
+        const cached = messageCacheRef.current.get(convId);
+        if (cached) messageCacheRef.current.set(convId, cached.map(m => m._id === tempMsg._id ? data.message : m));
         bumpConversation(convId, data.message);
       }
     } catch (err) {
@@ -475,6 +509,7 @@ onlineUsers={onlineUsers}
             setShowSidebar={setShowSidebar}
             loading={loadingConversations}
           openConversation={openConversation}
+          preFetchMessages={preFetchMessages}
           searchUsers={searchUsers}
           startConversation={startConversation}
           showError={showError}
