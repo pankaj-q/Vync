@@ -6,6 +6,7 @@ function Login() {
   const [user, setUser] = useState({ email: "", password: "" });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("");
 
   const handleChange = (e) => {
     setUser({ ...user, [e.target.name]: e.target.value });
@@ -15,6 +16,7 @@ function Login() {
     e.preventDefault();
     setMessage("");
     setLoading(true);
+    setLoadingStage("Connecting...");
 
     try {
       const response = await fetch("/api/users/login", {
@@ -23,8 +25,11 @@ function Login() {
         body: JSON.stringify(user),
       });
 
+      setLoadingStage("Verifying...");
+
       const data = await response.json();
       setLoading(false);
+      setLoadingStage("");
 
       if (response.ok) {
         localStorage.setItem("token", data.accessToken);
@@ -39,6 +44,7 @@ function Login() {
       }
     } catch (error) {
       setLoading(false);
+      setLoadingStage("");
       setMessage("Server Error");
     }
   };
@@ -60,9 +66,17 @@ function Login() {
       <form onSubmit={handleSubmit}>
         <input type="email" name="email" placeholder="Enter Email" value={user.email} onChange={handleChange} required disabled={loading} />
         <input type="password" name="password" placeholder="Enter Password" value={user.password} onChange={handleChange} required disabled={loading} />
-        <button type="submit" disabled={loading}>
-          {loading ? "Logging in..." : "Login"}
+        <button type="submit" disabled={loading} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          {loading ? (
+            <>
+              <span style={{ display: "inline-block", width: 16, height: 16, border: "2px solid #fff", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite", marginRight: 8, verticalAlign: "middle" }} />
+              {loadingStage}
+            </>
+          ) : "Login"}
         </button>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+        `}</style>
         <p className="forgot-link"><Link to="/forgot-password">Forgot password?</Link></p>
         <p>Don't have an account? <Link to="/">Register</Link></p>
       </form>
