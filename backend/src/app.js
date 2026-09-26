@@ -16,6 +16,9 @@ import messageRoutes from './routes/message.routes.js'
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Serve frontend from backend/public (copied during build)
+const publicDir = path.join(__dirname, '..', 'public');
+
 const app = express();
 app.use(helmet({
     contentSecurityPolicy: false,
@@ -65,16 +68,15 @@ app.use('/api/files', fileRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
 
-app.use(express.static('public'));
+// Serve static files from backend/public
+app.use(express.static(publicDir));
 
-const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
-app.use(express.static(frontendDist));
-
+// SPA fallback - serve index.html for non-API routes
 app.use((req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     if (req.path.startsWith('/assets')) return next();
     if (req.path.startsWith('/favicon')) return next();
-    res.sendFile(path.join(frontendDist, 'index.html'));
+    res.sendFile(path.join(publicDir, 'index.html'));
 });
 
 app.use(errorHandler);
