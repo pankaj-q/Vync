@@ -118,7 +118,12 @@ function Sidebar({
           {loading && <div className="loading-spinner" />}
           {!loading && conversations.length === 0 && <p className="empty-state">No conversations yet</p>}
           <AnimatePresence>
-            {conversations.map((c) => {
+            {conversations
+              .filter((c) => {
+                const other = getOtherParticipant(c);
+                return !searchQuery || other?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+              })
+              .map((c) => {
               const other = getOtherParticipant(c);
               return (
                 <motion.div key={c._id}

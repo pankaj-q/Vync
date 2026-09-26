@@ -1,5 +1,6 @@
 import Conversation from '../model/conversation.model.js';
 import Message from '../model/message.model.js';
+import User from '../model/user.model.js';
 
 const createOrGetConversation = async (req, res) => {
     try {
@@ -48,17 +49,28 @@ const getConversations = async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = Math.min(parseInt(req.query.limit) || 25, 50);
         const skip = (page - 1) * limit;
+        const search = req.query.search?.trim();
 
-        const conversations = await Conversation.find({
-            participants: req.user._id
-        })
+        let query = { participants: req.user._id };
+
+        if (search) {
+            const matchingUsers = await User.find({
+                $or: [
+                    { name: { $regex: search, $options: 'i' } },
+                    { email: { $regex: search, $options: 'i' } }
+                ]
+            }).select('_id').lean();
+            const userIds = matchingUsers.map(u => u._id);
+            query.participants = { $in: [...new Set([...query.participants, ...userIds])] };
+        }
+
+        const conversations = await Conversation.find(query)
             .populate('participants', 'name avatarUrl')
             .sort({ lastMessageAt: -1 })
             .skip(skip)
             .limit(limit)
             .lean();
 
-        // Return immediately - lastMessage preview loaded separately if needed
         res.json({ conversations, page, limit });
     } catch (error) {
         console.error("Get conversations error:", error);

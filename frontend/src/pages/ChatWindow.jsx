@@ -236,7 +236,19 @@ function ChatWindow({
             <div className="search-results-bar">{searchResults.length} result{searchResults.length > 1 ? "s" : ""} found</div>
           )}
           {messages.length === 0 && searchResults.length === 0 && !showSearch && <div className="no-messages" style={{ textAlign: "center", color: "#9ca3af", margin: "auto", fontSize: 14 }}>No messages yet. Start a conversation!</div>}
-          {loadingMessages && messages.length === 0 && <div className="loading-spinner" />}
+          {loadingMessages && messages.length === 0 && (
+            <div className="message-skeletons">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="message-skeleton">
+                  <div className="skeleton-avatar" />
+                  <div className="skeleton-bubble">
+                    <div className="skeleton-line" />
+                    <div className="skeleton-line short" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <AnimatePresence initial={false}>
             {(showSearch ? searchResults : messages).map((msg) => {
               const senderId = String(msg.sender?._id || msg.sender || '');

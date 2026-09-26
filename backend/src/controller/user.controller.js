@@ -191,9 +191,14 @@ const searchUsers = catchAsync(async (req, res) => {
     const { q } = req.query;
     if (!q || !q.trim()) return res.json({ users: [] });
 
+    const regex = new RegExp(q.trim(), 'i');
+
     const users = await User.find({
         _id: { $ne: req.user._id },
-        $text: { $search: q.trim() }
+        $or: [
+            { name: regex },
+            { email: regex }
+        ]
     }).select('name email avatarUrl bio')
     .limit(20)
     .lean();
