@@ -145,16 +145,17 @@ const loginUser = catchAsync(async (req, res) => {
         throw new AppError("Please fill all the fields", 400);
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).lean();
     if (!user) {
         throw new AppError("User does not exist please register first", 400);
     }
 
     if (!user.isVerified && isEmailConfigured()) {
         const otp = generateOTP();
-        user.verificationOTP = otp;
-        user.verificationOTPExpiry = new Date(Date.now() + 10 * 60 * 1000);
-        await user.save();
+        await User.updateOne(
+            { _id: user._id },
+            { $set: { verificationOTP: otp, verificationOTPExpiry: new Date(Date.now() + 10 * 60 * 1000) } }
+        );
         sendVerificationOTP(email, user.name, otp).catch((err) => console.error('Email send failed:', err));
         return res.status(403).json({
             message: "Please verify your email before logging in",
@@ -163,23 +164,24 @@ const loginUser = catchAsync(async (req, res) => {
         });
     }
 
-    const isMatched = await user.comparePassword(password);
+    const fullUser = await User.findById(user._id);
+    const isMatched = await fullUser.comparePassword(password);
     if (!isMatched) {
         throw new AppError("Invalid credentials", 400);
     }
 
-    const accessToken = user.generateAccessToken();
-    const refreshToken = user.generateRefreshToken();
+    const accessToken = fullUser.generateAccessToken();
+    const refreshToken = fullUser.generateRefreshToken();
 
     res.status(200).json({
         accessToken,
         refreshToken,
         user: {
-            id: user._id,
-            name: user.name,
-            email: user.email,
-            bio: user.bio || '',
-            avatarUrl: user.avatarUrl || ''
+            id: fullUser._id,
+            name: fullUser.name,
+            email: fullUser.email,
+            bio: fullUser.bio || '',
+            avatarUrl: fullUser.avatarUrl || ''
         }
     });
 });

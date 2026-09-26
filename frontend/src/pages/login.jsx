@@ -5,6 +5,7 @@ function Login() {
   const navigate = useNavigate();
   const [user, setUser] = useState({ email: "", password: "" });
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     setUser({ ...user, [e.target.name]: e.target.value });
@@ -13,6 +14,7 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
+    setLoading(true);
 
     try {
       const response = await fetch("/api/users/login", {
@@ -22,6 +24,7 @@ function Login() {
       });
 
       const data = await response.json();
+      setLoading(false);
 
       if (response.ok) {
         localStorage.setItem("token", data.accessToken);
@@ -35,6 +38,7 @@ function Login() {
         setMessage(data.message || "Invalid Credentials");
       }
     } catch (error) {
+      setLoading(false);
       setMessage("Server Error");
     }
   };
@@ -54,9 +58,11 @@ function Login() {
       </a>
       <div className="divider"><span>or</span></div>
       <form onSubmit={handleSubmit}>
-        <input type="email" name="email" placeholder="Enter Email" value={user.email} onChange={handleChange} required />
-        <input type="password" name="password" placeholder="Enter Password" value={user.password} onChange={handleChange} required />
-        <button type="submit">Login</button>
+        <input type="email" name="email" placeholder="Enter Email" value={user.email} onChange={handleChange} required disabled={loading} />
+        <input type="password" name="password" placeholder="Enter Password" value={user.password} onChange={handleChange} required disabled={loading} />
+        <button type="submit" disabled={loading}>
+          {loading ? "Logging in..." : "Login"}
+        </button>
         <p className="forgot-link"><Link to="/forgot-password">Forgot password?</Link></p>
         <p>Don't have an account? <Link to="/">Register</Link></p>
       </form>
