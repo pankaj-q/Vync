@@ -198,7 +198,7 @@ const searchUsers = catchAsync(async (req, res) => {
 });
 
 const getMe = catchAsync(async (req, res) => {
-    const user = await User.findById(req.user._id).select('-password');
+    const user = await User.findById(req.user._id).select('-password').lean();
     res.json({ user });
 });
 

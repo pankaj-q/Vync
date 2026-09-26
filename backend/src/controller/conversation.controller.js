@@ -58,20 +58,8 @@ const getConversations = async (req, res) => {
             .limit(limit)
             .lean();
 
-        // Add last message preview without full populate
-        const conversationIds = conversations.map(c => c._id);
-        const lastMessages = await Message.find({
-            _id: { $in: conversations.map(c => c.lastMessage).filter(Boolean) }
-        }).select('content createdAt messageType mediaUrl').lean();
-
-        const lastMsgMap = new Map(lastMessages.map(m => [String(m._id), m]));
-
-        const enriched = conversations.map(c => ({
-            ...c,
-            lastMessage: c.lastMessage ? lastMsgMap.get(String(c.lastMessage)) : null
-        }));
-
-        res.json({ conversations: enriched, page, limit });
+        // Return immediately - lastMessage preview loaded separately if needed
+        res.json({ conversations, page, limit });
     } catch (error) {
         console.error("Get conversations error:", error);
         res.status(500).json({ message: "Server error" });

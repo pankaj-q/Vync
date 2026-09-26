@@ -171,41 +171,37 @@ function Dashboard() {
   useEffect(() => {
     if (!getUserIdFromToken()) { navigate("/login"); return; }
 
-    const fetchUser = async () => {
-      try {
-        const res = await fetch("/api/users/me", {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.user) { setUser(data.user); localStorage.setItem("user", JSON.stringify(data.user)); }
-        }
-      } catch (e) { /* ignore */ }
+    let mounted = true;
+
+    const init = async () => {
+      const [userRes, convRes] = await Promise.all([
+        fetch("/api/users/me", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
+        fetch("/api/conversations?limit=20", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+      ]);
+
+      if (!mounted) return;
+
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        if (userData.user) { setUser(userData.user); localStorage.setItem("user", JSON.stringify(userData.user)); }
+      }
+      if (convRes.ok) {
+        const convData = await convRes.json();
+        if (convData.conversations) setConversations(convData.conversations);
+      }
     };
-    fetchUser();
-    fetchConversations();
+    init();
 
     const skt = getSocket();
     skt.auth = { token: localStorage.getItem("token") };
     if (!skt.connected) skt.connect();
 
-    skt.on("connect", () => {
-      setConnectionStatus("connected");
-      if (activeChatRef.current) {
-        skt.emit("join-conversation", activeChatRef.current._id);
-      }
-    });
-    skt.on("disconnect", (reason) => {
-      setConnectionStatus(reason === "io server disconnect" ? "disconnected" : "reconnecting");
-    });
-    skt.on("connect_error", () => setConnectionStatus("reconnecting"));
     const onNewMessage = (msg) => {
       const current = activeChatRef.current;
       if (current && String(msg.conversation) === String(current._id)) {
         addMessages([msg]);
         markAsRead(current._id);
       }
-      // Update cache
       const cached = messageCacheRef.current.get(msg.conversation);
       if (cached) {
         const exists = cached.some(m => m._id === msg._id);
@@ -251,6 +247,16 @@ function Dashboard() {
       ));
     };
 
+    skt.on("connect", () => {
+      setConnectionStatus("connected");
+      if (activeChatRef.current) {
+        skt.emit("join-conversation", activeChatRef.current._id);
+      }
+    });
+    skt.on("disconnect", (reason) => {
+      setConnectionStatus(reason === "io server disconnect" ? "disconnected" : "reconnecting");
+    });
+    skt.on("connect_error", () => setConnectionStatus("reconnecting"));
     skt.on("new-message", onNewMessage);
     skt.on("message-edited", onEdited);
     skt.on("message-deleted", onDeleted);
@@ -260,6 +266,7 @@ function Dashboard() {
     skt.on("message-reacted", onReacted);
 
     return () => {
+      mounted = false;
       skt.off("new-message", onNewMessage);
       skt.off("message-edited", onEdited);
       skt.off("message-deleted", onDeleted);
