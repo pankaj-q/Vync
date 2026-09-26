@@ -32,6 +32,7 @@ function Sidebar({
   const [savingProfile, setSavingProfile] = useState(false);
   const searchRef = useRef(null);
   const avatarInputRef = useRef(null);
+  const searchDebounceRef = useRef(null);
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -100,7 +101,12 @@ function Sidebar({
         </div>
         <div className="search-box" ref={searchRef}>
           <input type="text" placeholder="Search users..." value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); searchUsers(e.target.value); }} />
+            onChange={(e) => {
+              const val = e.target.value;
+              setSearchQuery(val);
+              clearTimeout(searchDebounceRef.current);
+              searchDebounceRef.current = setTimeout(() => searchUsers(val), 250);
+            }} />
           {users.length > 0 && (
             <motion.div className="search-results" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
               {users.map((u) => (

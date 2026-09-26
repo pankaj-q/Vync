@@ -54,12 +54,12 @@ const getConversations = async (req, res) => {
         let query = { participants: req.user._id };
 
         if (search) {
-            const matchingUsers = await User.find({
-                $or: [
-                    { name: { $regex: search, $options: 'i' } },
-                    { email: { $regex: search, $options: 'i' } }
-                ]
-            }).select('_id').lean();
+            // Use text index for fast search
+            const matchingUsers = await User.find(
+                { $text: { $search: search } },
+                { score: { $meta: 'textScore' } }
+            ).select('_id').limit(50).lean();
+            
             const userIds = matchingUsers.map(u => u._id);
             query.participants = { $in: [...new Set([...query.participants, ...userIds])] };
         }
