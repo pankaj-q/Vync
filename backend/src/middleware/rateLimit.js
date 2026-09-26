@@ -2,6 +2,7 @@ import redis from '../config/redis.js';
 
 const rateLimit = (windowMs = 60000, maxRequests = 30) => {
     return async (req, res, next) => {
+        if (!redis) return next();
         try {
             const key = `ratelimit:${req.ip}`;
             const current = await redis.incr(key);
@@ -19,6 +20,7 @@ const rateLimit = (windowMs = 60000, maxRequests = 30) => {
 };
 
 export const trackOnlineStatus = async (userId, status) => {
+    if (!redis) return;
     try {
         if (status === 'online') {
             await redis.set(`online:${userId}`, '1', 'EX', 300);
@@ -31,6 +33,7 @@ export const trackOnlineStatus = async (userId, status) => {
 };
 
 export const isUserOnline = async (userId) => {
+    if (!redis) return false;
     try {
         const result = await redis.get(`online:${userId}`);
         return result === '1';
