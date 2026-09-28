@@ -49,6 +49,10 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/health/check', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
 app.get('/api/health/email', async (req, res) => {
     res.json(await verifySmtp());
 });
